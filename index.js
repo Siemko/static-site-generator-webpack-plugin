@@ -1,9 +1,9 @@
-var RawSource = require('webpack-sources/lib/RawSource');
-var evaluate = require('eval');
-var path = require('path');
-var cheerio = require('cheerio');
-var url = require('url');
-var Promise = require('bluebird');
+var RawSource = require("webpack-sources/lib/RawSource");
+var evaluate = require("eval");
+var path = require("path");
+var cheerio = require("cheerio");
+var url = require("url");
+var Promise = require("bluebird");
 
 function StaticSiteGeneratorWebpackPlugin(options) {
   if (arguments.length > 1) {
@@ -13,17 +13,19 @@ function StaticSiteGeneratorWebpackPlugin(options) {
   options = options || {};
 
   this.entry = options.entry;
-  this.paths = Array.isArray(options.paths) ? options.paths : [options.paths || '/'];
+  this.paths = Array.isArray(options.paths)
+    ? options.paths
+    : [options.paths || "/"];
   this.locals = options.locals;
   this.globals = options.globals;
   this.crawl = Boolean(options.crawl);
 }
 
-StaticSiteGeneratorWebpackPlugin.prototype.apply = function(compiler) {
+StaticSiteGeneratorWebpackPlugin.prototype.apply = function (compiler) {
   var self = this;
 
-  addThisCompilationHandler(compiler, function(compilation) {
-    addOptimizeAssetsHandler(compilation, function(_, done) {
+  addThisCompilationHandler(compiler, function (compilation) {
+    addOptimizeAssetsHandler(compilation, function (_, done) {
       var renderPromises;
 
       var webpackStats = compilation.getStats();
@@ -39,18 +41,34 @@ StaticSiteGeneratorWebpackPlugin.prototype.apply = function(compiler) {
         var assets = getAssetsFromCompilation(compilation, webpackStatsJson);
 
         var source = asset.source();
-        var render = evaluate(source, /* filename: */ self.entry, /* scope: */ self.globals, /* includeGlobals: */ true);
+        var render = evaluate(
+          source,
+          /* filename: */ self.entry,
+          /* scope: */ self.globals,
+          /* includeGlobals: */ true
+        );
 
-        if (render.hasOwnProperty('default')) {
-          render = render['default'];
+        if (render.hasOwnProperty("default")) {
+          render = render["default"];
         }
 
-        if (typeof render !== 'function') {
-          throw new Error('Export from "' + self.entry + '" must be a function that returns an HTML string. Is output.libraryTarget in the configuration set to "umd"?');
+        if (typeof render !== "function") {
+          throw new Error(
+            'Export from "' +
+              self.entry +
+              '" must be a function that returns an HTML string. Is output.libraryTarget in the configuration set to "umd"?'
+          );
         }
 
-        renderPaths(self.crawl, self.locals, self.paths, render, assets, webpackStats, compilation)
-          .nodeify(done);
+        renderPaths(
+          self.crawl,
+          self.locals,
+          self.paths,
+          render,
+          assets,
+          webpackStats,
+          compilation
+        ).nodeify(done);
       } catch (err) {
         compilation.errors.push(err.stack);
         done();
@@ -59,12 +77,20 @@ StaticSiteGeneratorWebpackPlugin.prototype.apply = function(compiler) {
   });
 };
 
-function renderPaths(crawl, userLocals, paths, render, assets, webpackStats, compilation) {
-  var renderPromises = paths.map(function(outputPath) {
+function renderPaths(
+  crawl,
+  userLocals,
+  paths,
+  render,
+  assets,
+  webpackStats,
+  compilation
+) {
+  var renderPromises = paths.map(function (outputPath) {
     var locals = {
       path: outputPath,
       assets: assets,
-      webpackStats: webpackStats
+      webpackStats: webpackStats,
     };
 
     for (var prop in userLocals) {
@@ -73,15 +99,19 @@ function renderPaths(crawl, userLocals, paths, render, assets, webpackStats, com
       }
     }
 
-    var renderPromise = render.length < 2 ?
-      Promise.resolve(render(locals)) :
-      Promise.fromNode(render.bind(null, locals));
+    var renderPromise =
+      render.length < 2
+        ? Promise.resolve(render(locals))
+        : Promise.fromNode(render.bind(null, locals));
 
     return renderPromise
-      .then(function(output) {
-        var outputByPath = typeof output === 'object' ? output : makeObject(outputPath, output);
+      .then(function (output) {
+        var outputByPath =
+          typeof output === "object" ? output : makeObject(outputPath, output);
 
-        var assetGenerationPromises = Object.keys(outputByPath).map(function(key) {
+        var assetGenerationPromises = Object.keys(outputByPath).map(function (
+          key
+        ) {
           var rawSource = outputByPath[key];
           var assetName = pathToAssetName(key);
 
@@ -94,16 +124,24 @@ function renderPaths(crawl, userLocals, paths, render, assets, webpackStats, com
           if (crawl) {
             var relativePaths = relativePathsFromHtml({
               source: rawSource,
-              path: key
+              path: key,
             });
 
-            return renderPaths(crawl, userLocals, relativePaths, render, assets, webpackStats, compilation);
+            return renderPaths(
+              crawl,
+              userLocals,
+              relativePaths,
+              render,
+              assets,
+              webpackStats,
+              compilation
+            );
           }
         });
 
         return Promise.all(assetGenerationPromises);
       })
-      .catch(function(err) {
+      .catch(function (err) {
         compilation.errors.push(err.stack);
       });
   });
@@ -111,7 +149,7 @@ function renderPaths(crawl, userLocals, paths, render, assets, webpackStats, com
   return Promise.all(renderPromises);
 }
 
-var findAsset = function(src, compilation, webpackStatsJson) {
+var findAsset = function (src, compilation, webpackStatsJson) {
   if (!src) {
     var chunkNames = Object.keys(webpackStatsJson.assetsByChunkName);
 
@@ -132,7 +170,7 @@ var findAsset = function(src, compilation, webpackStatsJson) {
   // Webpack outputs an array for each chunk when using sourcemaps
   if (chunkValue instanceof Array) {
     // Is the main bundle always the first element?
-    chunkValue = chunkValue.find(function(filename) {
+    chunkValue = chunkValue.find(function (filename) {
       return /\.js$/.test(filename);
     });
   }
@@ -140,7 +178,7 @@ var findAsset = function(src, compilation, webpackStatsJson) {
 };
 
 // Shamelessly stolen from html-webpack-plugin - Thanks @ampedandwired :)
-var getAssetsFromCompilation = function(compilation, webpackStatsJson) {
+var getAssetsFromCompilation = function (compilation, webpackStatsJson) {
   var assets = {};
   for (var chunk in webpackStatsJson.assetsByChunkName) {
     var chunkValue = webpackStatsJson.assetsByChunkName[chunk];
@@ -148,7 +186,7 @@ var getAssetsFromCompilation = function(compilation, webpackStatsJson) {
     // Webpack outputs an array for each chunk when using sourcemaps
     if (chunkValue instanceof Array) {
       // Is the main bundle always the first JS element?
-      chunkValue = chunkValue.find(function(filename) {
+      chunkValue = chunkValue.find(function (filename) {
         return /\.js$/.test(filename);
       });
     }
@@ -163,10 +201,10 @@ var getAssetsFromCompilation = function(compilation, webpackStatsJson) {
 };
 
 function pathToAssetName(outputPath) {
-  var outputFileName = outputPath.replace(/^(\/|\\)/, ''); // Remove leading slashes for webpack-dev-server
+  var outputFileName = outputPath.replace(/^(\/|\\)/, ""); // Remove leading slashes for webpack-dev-server
 
   if (!/\.(html?)$/i.test(outputFileName)) {
-    outputFileName = path.join(outputFileName, 'index.html');
+    outputFileName = path.join(outputFileName, "index.html");
   }
 
   return outputFileName;
@@ -184,37 +222,37 @@ function relativePathsFromHtml(options) {
 
   var $ = cheerio.load(html);
 
-  var linkHrefs = $('a[href]')
-    .map(function(i, el) {
-      return $(el).attr('href');
+  var linkHrefs = $("a[href]")
+    .map(function (i, el) {
+      return $(el).attr("href");
     })
     .get();
 
-  var iframeSrcs = $('iframe[src]')
-    .map(function(i, el) {
-      return $(el).attr('src');
+  var iframeSrcs = $("iframe[src]")
+    .map(function (i, el) {
+      return $(el).attr("src");
     })
     .get();
 
   return []
     .concat(linkHrefs)
     .concat(iframeSrcs)
-    .map(function(href) {
-      if (href.indexOf('//') === 0) {
-        return null
+    .map(function (href) {
+      if (href.indexOf("//") === 0) {
+        return null;
       }
 
       var parsed = url.parse(href);
 
-      if (parsed.protocol || typeof parsed.path !== 'string') {
+      if (parsed.protocol || typeof parsed.path !== "string") {
         return null;
       }
 
-      return parsed.path.indexOf('/') === 0 ?
-        parsed.path :
-        url.resolve(currentPath, parsed.path);
+      return parsed.path.indexOf("/") === 0
+        ? parsed.path
+        : url.resolve(currentPath, parsed.path);
     })
-    .filter(function(href) {
+    .filter(function (href) {
       return href != null;
     });
 }
@@ -224,25 +262,37 @@ function legacyArgsToOptions(entry, paths, locals, globals) {
     entry: entry,
     paths: paths,
     locals: locals,
-    globals: globals
+    globals: globals,
   };
 }
 
 function addThisCompilationHandler(compiler, callback) {
-  if(compiler.hooks) {
+  if (compiler.hooks) {
     /* istanbul ignore next */
-    compiler.hooks.thisCompilation.tap('static-site-generator-webpack-plugin', callback);
+    compiler.hooks.thisCompilation.tap(
+      "static-site-generator-webpack-plugin",
+      callback
+    );
   } else {
-    compiler.plugin('this-compilation', callback);
+    compiler.plugin("this-compilation", callback);
   }
 }
 
 function addOptimizeAssetsHandler(compilation, callback) {
-  if(compilation.hooks) {
+  if (compilation.hooks && compilation.hooks.optimizeAssets) {
     /* istanbul ignore next */
-    compilation.hooks.optimizeAssets.tapAsync('static-site-generator-webpack-plugin',callback);
+    compilation.hooks.optimizeAssets.tapAsync(
+      "static-site-generator-webpack-plugin",
+      callback
+    );
+  } else if (compilation.hooks && compilation.hooks.processAssets) {
+    /* istanbul ignore next */
+    compilation.hooks.optimizeAssets.tapAsync(
+      "static-site-generator-webpack-plugin",
+      callback
+    );
   } else {
-    compilation.plugin('optimize-assets', callback);
+    compilation.plugin("optimize-assets", callback);
   }
 }
 
