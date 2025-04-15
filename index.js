@@ -26,21 +26,31 @@ class StaticSiteGeneratorWebpackPlugin {
           const webpackStats = compilation.getStats();
           const webpackStatsJson = webpackStats.toJson();
 
-          const asset = this.findAsset(this.entry, compilation, webpackStatsJson);
+          const asset = this.findAsset(
+            this.entry,
+            compilation,
+            webpackStatsJson
+          );
 
           if (asset == null) {
             throw new Error(`Source file not found: "${this.entry}"`);
           }
 
-          const assets = this.getAssetsFromCompilation(compilation, webpackStatsJson);
-          const source = asset.source();
-          
-          let render = evaluate(
-            source,
-            this.entry,
-            this.globals,
-            true
+          const assets = this.getAssetsFromCompilation(
+            compilation,
+            webpackStatsJson
           );
+          const source = asset.source();
+
+          const enhancedGlobals = {
+            ...this.globals,
+            // Add self reference to global scope to prevent "self is not defined" error
+            self: global,
+            // Also add window as an alias, common in browser code
+            window: global,
+          };
+
+          let render = evaluate(source, this.entry, enhancedGlobals, true);
 
           if (render.hasOwnProperty("default")) {
             render = render["default"];
@@ -60,10 +70,12 @@ class StaticSiteGeneratorWebpackPlugin {
             assets,
             webpackStats,
             compilation
-          ).then(() => done()).catch((err) => {
-            compilation.errors.push(err.stack);
-            done();
-          });
+          )
+            .then(() => done())
+            .catch((err) => {
+              compilation.errors.push(err.stack);
+              done();
+            });
         } catch (err) {
           compilation.errors.push(err.stack);
           done();
@@ -95,49 +107,54 @@ class StaticSiteGeneratorWebpackPlugin {
       }
 
       // Handle both sync and async renders
-      const renderPromise = render.length < 2
-        ? Promise.resolve(render(locals))
-        : new Promise((resolve, reject) => {
-            render(locals, (err, result) => {
-              if (err) return reject(err);
-              resolve(result);
+      const renderPromise =
+        render.length < 2
+          ? Promise.resolve(render(locals))
+          : new Promise((resolve, reject) => {
+              render(locals, (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+              });
             });
-          });
 
       return renderPromise
         .then((output) => {
           const outputByPath =
-            typeof output === "object" ? output : this.makeObject(outputPath, output);
+            typeof output === "object"
+              ? output
+              : this.makeObject(outputPath, output);
 
-          const assetGenerationPromises = Object.keys(outputByPath).map((key) => {
-            const rawSource = outputByPath[key];
-            const assetName = this.pathToAssetName(key);
+          const assetGenerationPromises = Object.keys(outputByPath).map(
+            (key) => {
+              const rawSource = outputByPath[key];
+              const assetName = this.pathToAssetName(key);
 
-            if (compilation.assets[assetName]) {
+              if (compilation.assets[assetName]) {
+                return Promise.resolve();
+              }
+
+              compilation.assets[assetName] = new RawSource(rawSource);
+
+              if (crawl) {
+                const relativePaths = this.relativePathsFromHtml({
+                  source: rawSource,
+                  path: key,
+                });
+
+                return this.renderPaths(
+                  crawl,
+                  userLocals,
+                  relativePaths,
+                  render,
+                  assets,
+                  webpackStats,
+                  compilation
+                );
+              }
+
               return Promise.resolve();
             }
-
-            compilation.assets[assetName] = new RawSource(rawSource);
-
-            if (crawl) {
-              const relativePaths = this.relativePathsFromHtml({
-                source: rawSource,
-                path: key,
-              });
-
-              return this.renderPaths(
-                crawl,
-                userLocals,
-                relativePaths,
-                render,
-                assets,
-                webpackStats,
-                compilation
-              );
-            }
-            
-            return Promise.resolve();
-          });
+          );
 
           return Promise.all(assetGenerationPromises);
         })
@@ -166,19 +183,19 @@ class StaticSiteGeneratorWebpackPlugin {
     if (!chunkValue) {
       return null;
     }
-    
+
     // Webpack outputs an array for each chunk when using sourcemaps
     if (Array.isArray(chunkValue)) {
       // Find the main JS file
       chunkValue = chunkValue.find((filename) => /\.js$/.test(filename));
     }
-    
+
     return compilation.assets[chunkValue];
   }
 
   getAssetsFromCompilation(compilation, webpackStatsJson) {
     const assets = {};
-    
+
     for (const chunk in webpackStatsJson.assetsByChunkName) {
       let chunkValue = webpackStatsJson.assetsByChunkName[chunk];
 
@@ -190,7 +207,7 @@ class StaticSiteGeneratorWebpackPlugin {
       if (compilation.options.output.publicPath) {
         chunkValue = compilation.options.output.publicPath + chunkValue;
       }
-      
+
       assets[chunk] = chunkValue;
     }
 
