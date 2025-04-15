@@ -287,7 +287,7 @@ function addOptimizeAssetsHandler(compilation, callback) {
     );
   } else if (compilation.hooks && compilation.hooks.processAssets) {
     /* istanbul ignore next */
-    compilation.hooks.optimizeAssets.tapAsync(
+    compilation.hooks.processAssets.tapAsync(
       "static-site-generator-webpack-plugin",
       callback
     );
