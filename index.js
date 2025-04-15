@@ -5,77 +5,75 @@ var cheerio = require("cheerio");
 var url = require("url");
 var Promise = require("bluebird");
 
-function StaticSiteGeneratorWebpackPlugin(options) {
-  if (arguments.length > 1) {
-    options = legacyArgsToOptions.apply(null, arguments);
+class StaticSiteGeneratorWebpackPlugin {
+  constructor(options) {
+    if (typeof options !== "object") {
+      options = legacyArgsToOptions(options);
+    }
+
+    this.entry = options.entry;
+    this.paths = Array.isArray(options.paths)
+      ? options.paths
+      : [options.paths || "/"];
+    this.locals = options.locals;
+    this.globals = options.globals;
+    this.crawl = Boolean(options.crawl);
   }
 
-  options = options || {};
+  apply(compiler) {
+    addThisCompilationHandler(compiler, function (compilation) {
+      addOptimizeAssetsHandler(compilation, function (_, done) {
+        var renderPromises;
 
-  this.entry = options.entry;
-  this.paths = Array.isArray(options.paths)
-    ? options.paths
-    : [options.paths || "/"];
-  this.locals = options.locals;
-  this.globals = options.globals;
-  this.crawl = Boolean(options.crawl);
-}
+        var webpackStats = compilation.getStats();
+        var webpackStatsJson = webpackStats.toJson();
 
-StaticSiteGeneratorWebpackPlugin.prototype.apply = function (compiler) {
-  var self = this;
+        try {
+          var asset = findAsset(this.entry, compilation, webpackStatsJson);
 
-  addThisCompilationHandler(compiler, function (compilation) {
-    addOptimizeAssetsHandler(compilation, function (_, done) {
-      var renderPromises;
+          if (asset == null) {
+            throw new Error('Source file not found: "' + this.entry + '"');
+          }
 
-      var webpackStats = compilation.getStats();
-      var webpackStatsJson = webpackStats.toJson();
+          var assets = getAssetsFromCompilation(compilation, webpackStatsJson);
 
-      try {
-        var asset = findAsset(self.entry, compilation, webpackStatsJson);
-
-        if (asset == null) {
-          throw new Error('Source file not found: "' + self.entry + '"');
-        }
-
-        var assets = getAssetsFromCompilation(compilation, webpackStatsJson);
-
-        var source = asset.source();
-        var render = evaluate(
-          source,
-          /* filename: */ self.entry,
-          /* scope: */ self.globals,
-          /* includeGlobals: */ true
-        );
-
-        if (render.hasOwnProperty("default")) {
-          render = render["default"];
-        }
-
-        if (typeof render !== "function") {
-          throw new Error(
-            'Export from "' +
-              self.entry +
-              '" must be a function that returns an HTML string. Is output.libraryTarget in the configuration set to "umd"?'
+          var source = asset.source();
+          var render = evaluate(
+            source,
+            /* filename: */ this.entry,
+            /* scope: */ this.globals,
+            /* includeGlobals: */ true
           );
-        }
 
-        renderPaths(
-          self.crawl,
-          self.locals,
-          self.paths,
-          render,
-          assets,
-          webpackStats,
-          compilation
-        ).nodeify(done);
-      } catch (err) {
-        compilation.errors.push(err.stack);
-        done();
-      }
+          if (render.hasOwnProperty("default")) {
+            render = render["default"];
+          }
+
+          if (typeof render !== "function") {
+            throw new Error(
+              'Export from "' +
+                this.entry +
+                '" must be a function that returns an HTML string. Is output.libraryTarget in the configuration set to "umd"?'
+            );
+          }
+
+          renderPaths(
+            this.crawl,
+            this.locals,
+            this.paths,
+            render,
+            assets,
+            webpackStats,
+            compilation
+          ).nodeify(done);
+        } catch (err) {
+          compilation.errors.push(err.stack);
+          done();
+        }
+      });
     });
-  });
-};
+  }
+}
 
 function renderPaths(
   crawl,
