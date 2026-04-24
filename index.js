@@ -29,7 +29,7 @@ class StaticSiteGeneratorWebpackPlugin {
           const asset = this.findAsset(
             this.entry,
             compilation,
-            webpackStatsJson
+            webpackStatsJson,
           );
 
           if (asset == null) {
@@ -38,7 +38,7 @@ class StaticSiteGeneratorWebpackPlugin {
 
           const assets = this.getAssetsFromCompilation(
             compilation,
-            webpackStatsJson
+            webpackStatsJson,
           );
           const source = asset.source();
 
@@ -58,7 +58,7 @@ class StaticSiteGeneratorWebpackPlugin {
 
           if (typeof render !== "function") {
             throw new Error(
-              `Export from "${this.entry}" must be a function that returns an HTML string. Is output.libraryTarget in the configuration set to "umd"?`
+              `Export from "${this.entry}" must be a function that returns an HTML string. Is output.libraryTarget in the configuration set to "umd"?`,
             );
           }
 
@@ -69,7 +69,7 @@ class StaticSiteGeneratorWebpackPlugin {
             render,
             assets,
             webpackStats,
-            compilation
+            compilation,
           )
             .then(() => done())
             .catch((err) => {
@@ -91,7 +91,7 @@ class StaticSiteGeneratorWebpackPlugin {
     render,
     assets,
     webpackStats,
-    compilation
+    compilation,
   ) {
     const renderPromises = paths.map((outputPath) => {
       const locals = {
@@ -148,12 +148,12 @@ class StaticSiteGeneratorWebpackPlugin {
                   render,
                   assets,
                   webpackStats,
-                  compilation
+                  compilation,
                 );
               }
 
               return Promise.resolve();
-            }
+            },
           );
 
           return Promise.all(assetGenerationPromises);
@@ -278,7 +278,7 @@ class StaticSiteGeneratorWebpackPlugin {
     if (compiler.hooks) {
       compiler.hooks.thisCompilation.tap(
         "static-site-generator-webpack-plugin",
-        callback
+        callback,
       );
     } else {
       compiler.plugin("this-compilation", callback);
@@ -286,15 +286,15 @@ class StaticSiteGeneratorWebpackPlugin {
   }
 
   addOptimizeAssetsHandler(compilation, callback) {
-    if (compilation.hooks && compilation.hooks.optimizeAssets) {
-      compilation.hooks.optimizeAssets.tapAsync(
-        "static-site-generator-webpack-plugin",
-        callback
-      );
-    } else if (compilation.hooks && compilation.hooks.processAssets) {
+    if (compilation.hooks && compilation.hooks.processAssets) {
       compilation.hooks.processAssets.tapAsync(
         "static-site-generator-webpack-plugin",
-        callback
+        callback,
+      );
+    } else if (compilation.hooks && compilation.hooks.optimizeAssets) {
+      compilation.hooks.optimizeAssets.tapAsync(
+        "static-site-generator-webpack-plugin",
+        callback,
       );
     } else {
       compilation.plugin("optimize-assets", callback);
