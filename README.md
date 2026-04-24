@@ -2,7 +2,9 @@
 
 # static site generator webpack plugin
 
-Minimal, unopinionated static site generator powered by webpack.
+Minimal, unopinionated static site generator powered by webpack-compatible bundlers.
+
+Works with webpack and Rspack, including Rspack 1.x and 2.x.
 
 Bring the world of server rendering to your static build process. Either provide an array of paths to be rendered, or *crawl your site automatically*, and a matching set of `index.html` files will be rendered in your output directory by executing your own custom, webpack-compiled render function.
 
@@ -16,9 +18,9 @@ $ npm install --save-dev static-site-generator-webpack-plugin
 
 ## Usage
 
-Ensure you have webpack installed, e.g. `npm install -g webpack`
+Ensure you have webpack or Rspack installed.
 
-### webpack.config.js
+### webpack.config.js / rspack.config.js
 
 ```js
 const StaticSiteGeneratorPlugin = require('static-site-generator-webpack-plugin');
@@ -101,12 +103,14 @@ Note that this will still be executed for each entry in your `paths` array in yo
 // The path currently being rendered:
 locals.path;
 
-// An object containing all assets:
+// An object mapping each chunk name to its primary JavaScript asset:
 locals.assets;
 
-// Advanced: Webpack's stats object:
+// Advanced: the current bundler's stats object:
 locals.webpackStats;
 ```
+
+Prefer `locals.assets` for portable asset lookups. `locals.webpackStats` is intended for advanced use and its exact shape can differ between webpack and Rspack.
 
 Any additional locals provided in your config are also available.
 
@@ -186,14 +190,10 @@ module.exports = {
 }
 ```
 
-## Asset support
+## Entry asset support
 
 template.ejs
 ```ejs
-<% css.forEach(function(file){ %>
-<link href="<%- file %>" rel="stylesheet">
-<% }); %>
-
 <% js.forEach(function(file){ %>
 <script src="<%- file %>" async></script>
 <% }); %>
@@ -210,12 +210,12 @@ if (typeof global.document !== 'undefined') {
 }
 
 export default (data) => {
-  const assets = Object.keys(data.webpackStats.compilation.assets);
-  const css = assets.filter(value => value.match(/\.css$/));
-  const js = assets.filter(value => value.match(/\.js$/));
-  return template({ css, js, ...data});
+  const js = Object.keys(data.assets).map((chunkName) => data.assets[chunkName]);
+  return template({ js, ...data });
 }
 ```
+
+`locals.assets` is the recommended cross-bundler API when you need entry scripts in your rendered HTML.
 
 ## Specifying entry
 
